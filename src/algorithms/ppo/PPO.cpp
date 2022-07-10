@@ -13,15 +13,20 @@ PPO::~PPO()
 
 }
 
-void PPO::Learn(const size_t total_timesteps)
+void PPO::Learn(const uint64_t total_timesteps)
 {
     torch::optim::Adam optimizer(policy->parameters(), torch::optim::AdamOptions(args.lr));
     RolloutBuffer rollout_buffer(env.GetNumEnvs(), args.n_steps);
 
     env.Reset();
 
-    size_t timestep = 0;
-    size_t iteration = 0;
+    uint64_t timestep = 0;
+    uint64_t iteration = 0;
+
+    float average_reward_per_episode = 0.0f;
+    float average_reward_per_step = 0.0f;
+    float average_episode_length = 0.0f;
+    bool has_average = false;
 
     while (timestep < total_timesteps)
     {
@@ -29,7 +34,13 @@ void PPO::Learn(const size_t total_timesteps)
         uint64_t total_steps, total_episodes;
         std::tie(total_reward, total_steps, total_episodes) = CollectRollouts(rollout_buffer);
 
-        //env.PrintMeanStd();
+        if (total_episodes > 0)
+        {
+            has_average = true;
+            average_reward_per_episode = total_reward / total_episodes;
+            average_reward_per_step = total_reward / total_steps;
+            average_episode_length = static_cast<float>(total_steps) / total_episodes;
+        }
 
         auto dataset = rollout_buffer.map(RolloutSampleBatchTransform());
         timestep += dataset.size().value();
@@ -42,7 +53,7 @@ void PPO::Learn(const size_t total_timesteps)
         int num_batches = 0;
 
         policy->train(true);
-        for (size_t i = 0; i < args.n_epochs; ++i)
+        for (uint64_t i = 0; i < args.n_epochs; ++i)
         {
             for (auto& rollout_data : *dataloader)
             {
@@ -83,11 +94,16 @@ void PPO::Learn(const size_t total_timesteps)
             }
         }
 
+        std::cout 
+            << "Timestep: " << timestep << "\n";
+        if (has_average)
+        {
+            std::cout
+                << "Average reward per episode: " << average_reward_per_episode << "\n"
+                << "Average reward per step: " << average_reward_per_step << "\n"
+                << "Average episode length: " << average_episode_length << "\n";
+        }
         std::cout
-            << "Timestep: " << timestep << "\n"
-            << "Average reward per episode: " << total_reward / total_episodes << "\n"
-            << "Average reward per step: " << total_reward / total_steps << "\n"
-            << "Average episode length: " << static_cast<float>(total_steps) / total_episodes << "\n"
             << "Policy Loss: " << policy_loss_val / num_batches << "\n"
             << "Value Loss: " << value_loss_val / num_batches << "\n"
             << "Entropy Loss: " << entropy_loss_val / num_batches << "\n"
@@ -100,7 +116,7 @@ std::tuple<float, uint64_t, uint64_t> PPO::CollectRollouts(RolloutBuffer& buffer
     policy->train(false);
     buffer.Reset();
 
-    size_t t = 0;
+    uint64_t t = 0;
     float total_reward = 0.0f;
     uint64_t total_steps = 0;
     uint64_t total_end_episodes = 0;
@@ -123,7 +139,7 @@ std::tuple<float, uint64_t, uint64_t> PPO::CollectRollouts(RolloutBuffer& buffer
         //total_reward += step_result.rewards.sum().item<float>();
 
         bool has_env_timeout = false;
-        for (size_t i = 0; i < step_result.terminal_states.size(); ++i)
+        for (uint64_t i = 0; i < step_result.terminal_states.size(); ++i)
         {
             has_env_timeout = has_env_timeout || step_result.terminal_states[i] == TerminalState::Timeout;
         }
@@ -133,7 +149,7 @@ std::tuple<float, uint64_t, uint64_t> PPO::CollectRollouts(RolloutBuffer& buffer
         {
             torch::NoGradGuard no_grad;
             torch::Tensor terminal_value = policy->PredictValues(step_result.obs);
-            for (size_t i = 0; i < step_result.terminal_states.size(); ++i)
+            for (uint64_t i = 0; i < step_result.terminal_states.size(); ++i)
             {
                 if (step_result.terminal_states[i] == TerminalState::Timeout)
                 {
@@ -146,7 +162,7 @@ std::tuple<float, uint64_t, uint64_t> PPO::CollectRollouts(RolloutBuffer& buffer
 
         // Set the observation for the next step
         obs = step_result.obs;
-        for (size_t i = 0; i < step_result.terminal_states.size(); ++i)
+        for (uint64_t i = 0; i < step_result.terminal_states.size(); ++i)
         {
             if (step_result.terminal_states[i] != TerminalState::NotTerminal)
             {
@@ -166,7 +182,7 @@ std::tuple<float, uint64_t, uint64_t> PPO::CollectRollouts(RolloutBuffer& buffer
     {
         torch::NoGradGuard no_grad;
         future_value = policy->PredictValues(obs);
-        for (size_t i = 0; i < future_value.size(0); ++i)
+        for (uint64_t i = 0; i < future_value.size(0); ++i)
         {
             if (step_result.terminal_states[i] != TerminalState::NotTerminal)
             {

@@ -33,19 +33,6 @@ public:
 	/// @return a tensor of size {N, GetObservationSize()}
 	virtual torch::Tensor GetObs() const override;
 
-
-	virtual void PrintMeanStd() const override
-	{
-		std::cout << "Obs: \n";
-		std::cout << obs_rms.GetMean() << std::endl;
-		std::cout << obs_rms.GetVar() << std::endl;
-		std::cout << obs_rms.GetCount() << std::endl;
-		std::cout << "Reward: \n";
-		std::cout << ret_rms.GetMean() << std::endl;
-		std::cout << ret_rms.GetVar() << std::endl;
-		std::cout << ret_rms.GetCount() << std::endl;
-	}
-
 protected:
 	virtual void PostCreateEnvs(const int N) override;
 

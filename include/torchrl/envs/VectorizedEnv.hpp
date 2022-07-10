@@ -81,11 +81,6 @@ public:
 		PostCreateEnvs(N);
 	}
 
-	virtual void PrintMeanStd() const
-	{
-
-	}
-
 protected:
 	/// @brief Called after env are created
 	/// @param N Number of created envs

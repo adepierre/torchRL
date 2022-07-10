@@ -33,7 +33,7 @@ torch::Tensor NormalizedVectorizedEnv::Reset()
     torch::Tensor obs = VectorizedEnv::Reset();
     UpdateObs(obs);
 
-    returns = torch::zeros({ static_cast<int64_t>(envs.size()) });
+    returns = torch::zeros({ static_cast<int64_t>(envs.size()) }).set_requires_grad(false);
 
     return NormalizeObs(obs);
 }
@@ -63,9 +63,10 @@ VectorizedStepResult NormalizedVectorizedEnv::Step(const torch::Tensor& action)
     out.rewards = NormalizeReward(out.rewards);
     for (size_t i = 0; i < envs.size(); ++i)
     {
-        if (out.new_episode_obs[i].numel())
+        if (out.terminal_states[i] != TerminalState::NotTerminal)
         {
             out.new_episode_obs[i] = NormalizeObs(out.new_episode_obs[i].unsqueeze(0)).squeeze(0);
+            returns[i] = 0.0f;
         }
     }
 
@@ -80,7 +81,7 @@ torch::Tensor NormalizedVectorizedEnv::GetObs() const
 
 void NormalizedVectorizedEnv::PostCreateEnvs(const int N)
 {
-    returns = torch::zeros({ N });
+    returns = torch::zeros({ N }).set_requires_grad(false);
 
     obs_rms = RunningMeanStd({ obs_size });
     ret_rms = RunningMeanStd({  });

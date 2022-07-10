@@ -22,11 +22,6 @@ const torch::Tensor& RunningMeanStd::GetVar() const
     return var;
 }
 
-const float RunningMeanStd::GetCount() const
-{
-    return count;
-}
-
 void RunningMeanStd::Update(const torch::Tensor& batch)
 {
     torch::NoGradGuard no_grad;

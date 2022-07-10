@@ -1,17 +1,9 @@
 #pragma once
 
+#include "torchrl/rl/Args.hpp"
 
-#include <iostream>
-#include <random>
-#include <chrono>
-#include <string>
-
-struct PPOArgs
+struct PPOArgs : public Args
 {
-
-    unsigned int seed = std::mt19937(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count())();
-    size_t n_envs = 4;
-
     // Training parameters
 
     /// @brief Learning mini-batch size
@@ -41,13 +33,14 @@ struct PPOArgs
     /// @brief Learning rate
     float lr = 0.001f;
 
-    void ShowHelp(const char* argv0)
+    std::string GenerateHelp(const char* argv0, const bool include_parent_help = true)
     {
-        std::cout << "Usage: " << argv0 << " <options>\n"
-            << "Options:\n"
-            << "\t-h, --help\tShow this help message\n"
-            << "\t--seed\tRandom seed for envs and libtorch, default: random\n"
-            << "\t--n_envs\tNumber of identical environments in the vectorized env, default: 4\n"
+        std::stringstream s;
+        if (include_parent_help)
+        {
+            s << Args::GenerateHelp(argv0);
+        }
+        s
             << "\t--batch_size\tSize of a minibatch, default: 64\n"
             << "\t--n_steps\tNumber of steps collected by each env during one rollout, default: 1024\n"
             << "\t--n_epochs\tNumber of times each collected sample is used for training, default: 5\n"
@@ -59,42 +52,23 @@ struct PPOArgs
             << "\t--gamma\tGamma value, default: 0.9\n"
             << "\t--lambda_gae\tLambda value for GAE, default: 0.95\n"
             << "\t--clip_value\tPPO Clip value, default: 0.2\n"
-            << "\t--lr\tLearning rate, default: 0.001\n"
-            << std::endl;
+            << "\t--lr\tLearning rate, default: 0.001\n";
+
+        return s.str();
     }
 
     void ParseArgs(char argc, char* argv[])
     {
+        // First, parse parents args
+        Args::ParseArgs(argc, argv);
+
+        // Then parse self args
         for (int i = 1; i < argc; ++i)
         {
             std::string arg = argv[i];
             if (arg == "-h" || arg == "--help")
             {
-                ShowHelp(argv[0]);
-            }
-            else if (arg == "--seed")
-            {
-                if (i + 1 < argc)
-                {
-                    seed = std::stoul(argv[++i]);
-                }
-                else
-                {
-                    std::cerr << "--seed requires an argument" << std::endl;
-                    return;
-                }
-            }
-            else if (arg == "--n_envs")
-            {
-                if (i + 1 < argc)
-                {
-                    n_envs = std::stoull(argv[++i]);
-                }
-                else
-                {
-                    std::cerr << "--n_envs requires an argument" << std::endl;
-                    return;
-                }
+                std::cout << GenerateHelp(argv[0], false) << std::endl;
             }
             else if (arg == "--batch_size")
             {

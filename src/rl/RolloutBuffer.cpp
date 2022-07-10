@@ -88,5 +88,3 @@ void RolloutBuffer::ComputeReturnsAndAdvantage(const torch::Tensor& value,
         }
     }
 }
-
-

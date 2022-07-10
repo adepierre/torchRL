@@ -15,7 +15,6 @@ public:
 
     const torch::Tensor& GetMean() const;
     const torch::Tensor& GetVar() const;
-    const float GetCount() const;
 
     /// @brief Update the mean and var from a batch of size { Nx... }
     /// @param batch The batch of data

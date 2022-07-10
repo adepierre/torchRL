@@ -13,6 +13,7 @@ set(hdr_files
     include/torchrl/envs/impl/MountainCarContinuous.hpp
     include/torchrl/envs/impl/PendulumEnv.hpp
     
+    include/torchrl/rl/Args.hpp
     include/torchrl/rl/MLP.hpp
     include/torchrl/rl/NormalDistribution.hpp
     include/torchrl/rl/Policy.hpp

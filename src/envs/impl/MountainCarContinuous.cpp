@@ -61,7 +61,7 @@ StepResult MountainCarContinuous::StepImpl(const torch::Tensor& action)
 
 torch::Tensor MountainCarContinuous::GetObs() const
 {
-    torch::Tensor output = torch::zeros({ 1, 2 });
+    torch::Tensor output = torch::zeros({ 2 });
     float* data = output.data<float>();
 
     data[0] = position;
