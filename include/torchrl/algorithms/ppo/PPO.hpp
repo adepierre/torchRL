@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "torchrl/rl/Policy.hpp"
 
 struct PPOArgs;

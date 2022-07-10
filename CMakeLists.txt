@@ -6,7 +6,6 @@ set(hdr_files
     include/torchrl/algorithms/ppo/PPOArgs.hpp
     
     include/torchrl/envs/AbstractEnv.hpp
-    include/torchrl/envs/NormalizedVectorizedEnv.hpp
     include/torchrl/envs/RunningMeanStd.hpp
     include/torchrl/envs/VectorizedEnv.hpp
     
@@ -24,7 +23,6 @@ set(src_files
     src/algorithms/ppo/PPO.cpp
     
     src/envs/AbstractEnv.cpp
-    src/envs/NormalizedVectorizedEnv.cpp
     src/envs/RunningMeanStd.cpp
     src/envs/VectorizedEnv.cpp
     

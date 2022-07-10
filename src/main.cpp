@@ -2,7 +2,6 @@
 #include "torchrl/algorithms/ppo/PPO.hpp"
 #include "torchrl/algorithms/ppo/PPOArgs.hpp"
 #include "torchrl/envs/VectorizedEnv.hpp"
-#include "torchrl/envs/NormalizedVectorizedEnv.hpp"
 #include "torchrl/envs/impl/PendulumEnv.hpp"
 #include "torchrl/envs/impl/MountainCarContinuous.hpp"
 
@@ -29,15 +28,19 @@ int main(char argc, char* argv[])
         args.init_sampling_log_std = -3.0f;
         args.ortho_init = false;
 
+        //args.normalize_env_obs = false;
+        //args.normalize_env_reward = false;
+
         torch::manual_seed(args.seed);
-        NormalizedVectorizedEnv env(true);
-        //VectorizedEnv env;
+        VectorizedEnv env(args.normalize_env_obs, args.normalize_env_reward);
         env.CreateEnvs<MountainCarContinuous>(args.n_envs, args.seed);
+        //env.CreateEnvs<PendulumEnv>(args.n_envs, args.seed);
 
         PPO ppo(env, args);
 
         auto start = std::chrono::steady_clock::now();
         ppo.Learn(20000);
+        ///ppo.Learn(100000);
         auto end = std::chrono::steady_clock::now();
         std::cout << "Training done in: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0 << "s" << std::endl;
     }

@@ -2,10 +2,23 @@
 
 #include <stdexcept>
 
-VectorizedEnv::VectorizedEnv()
+VectorizedEnv::VectorizedEnv(
+    const bool norm_obs_, const bool norm_reward_,
+    const float max_obs_, const float max_reward_,
+    const float discount_factor_, const float epsilon_
+)
 {
+    num_envs = 0;
     obs_size = 0;
     act_size = 0;
+
+    training = true;
+    norm_obs = norm_obs_;
+    norm_reward = norm_reward_;
+    max_obs = max_obs_;
+    max_reward = max_reward_;
+    discount_factor = discount_factor_;
+    epsilon = epsilon_;
 }
 
 VectorizedEnv::~VectorizedEnv()
@@ -13,9 +26,14 @@ VectorizedEnv::~VectorizedEnv()
 
 }
 
-size_t VectorizedEnv::GetNumEnvs() const
+void VectorizedEnv::SetTraining(const bool b)
 {
-    return envs.size();
+    training = b;
+}
+
+int64_t VectorizedEnv::GetNumEnvs() const
+{
+    return num_envs;
 }
 
 int64_t VectorizedEnv::GetObservationSize() const
@@ -30,24 +48,33 @@ int64_t VectorizedEnv::GetActionSize() const
 
 torch::Tensor VectorizedEnv::Reset()
 {
-    torch::Tensor obs = torch::zeros({ static_cast<int64_t>(envs.size()), obs_size });
-    for (size_t i = 0; i < envs.size(); ++i)
+    torch::Tensor obs = torch::zeros({ num_envs, obs_size });
+    for (size_t i = 0; i < num_envs; ++i)
     {
         obs[i] = envs[i]->Reset();
     }
-    return obs;
+
+    UpdateObs(obs);
+
+    if (norm_reward)
+    {
+        returns = torch::zeros({ num_envs }).set_requires_grad(false);
+    }
+
+    return NormalizeObs(obs);
 }
 
 VectorizedStepResult VectorizedEnv::Step(const torch::Tensor& action)
 {
-    torch::Tensor obs = torch::zeros({ static_cast<int64_t>(envs.size()), obs_size });
-    torch::Tensor rewards = torch::zeros({ static_cast<int64_t>(envs.size()) });
-    std::vector<TerminalState> terminal_states(envs.size());
-    std::vector<torch::Tensor> new_episode_obs(envs.size());
-    std::vector<float> tot_reward(envs.size());
-    std::vector<uint64_t> tot_steps(envs.size());
+    torch::Tensor obs = torch::zeros({ num_envs, obs_size });
+    torch::Tensor normalizer_obs = torch::zeros({ num_envs, obs_size });
+    torch::Tensor rewards = torch::zeros({ num_envs });
+    std::vector<TerminalState> terminal_states(num_envs);
+    std::vector<torch::Tensor> new_episode_obs(num_envs);
+    std::vector<float> tot_reward(num_envs);
+    std::vector<uint64_t> tot_steps(num_envs);
 
-    for (size_t i = 0; i < envs.size(); ++i)
+    for (size_t i = 0; i < num_envs; ++i)
     {
         StepResult res = envs[i]->Step(action[i]);
         obs[i] = res.obs;
@@ -56,14 +83,44 @@ VectorizedStepResult VectorizedEnv::Step(const torch::Tensor& action)
         new_episode_obs[i] = res.new_episode_obs;
         tot_reward[i] = res.tot_reward;
         tot_steps[i] = res.tot_steps;
+
+        if (norm_obs)
+        {
+            if (res.terminal_state == TerminalState::NotTerminal)
+            {
+                normalizer_obs[i] = res.obs;
+            }
+            else
+            {
+                normalizer_obs[i] = res.new_episode_obs;
+            }
+        }
     }
 
-    return VectorizedStepResult{ obs, rewards, terminal_states, new_episode_obs, tot_reward, tot_steps };
+    UpdateObs(normalizer_obs);
+    UpdateReward(rewards);
+
+    for (size_t i = 0; i < num_envs; ++i)
+    {
+        if (terminal_states[i] != TerminalState::NotTerminal)
+        {
+            if (norm_obs)
+            {
+                new_episode_obs[i] = NormalizeObs(new_episode_obs[i].unsqueeze(0)).squeeze(0);
+            }
+            if (norm_reward)
+            {
+                returns[i] = 0.0f;
+            }
+        }
+    }
+
+    return VectorizedStepResult{ NormalizeObs(obs), NormalizeReward(rewards), terminal_states, new_episode_obs, tot_reward, tot_steps };
 }
 
 void VectorizedEnv::Render(const size_t wait_ms)
 {
-    for (size_t i = 0; i < envs.size(); ++i)
+    for (size_t i = 0; i < num_envs; ++i)
     {
         envs[i]->Render();
     }
@@ -72,16 +129,51 @@ void VectorizedEnv::Render(const size_t wait_ms)
 
 torch::Tensor VectorizedEnv::GetObs() const
 {
-    torch::Tensor obs = torch::zeros({ static_cast<int64_t>(envs.size()), obs_size });
-    for (size_t i = 0; i < envs.size(); ++i)
+    torch::Tensor obs = torch::zeros({ num_envs, obs_size });
+    for (size_t i = 0; i < num_envs; ++i)
     {
         obs[i] = envs[i]->GetObs();
     }
-    return obs;
+    return NormalizeObs(obs);
 }
 
-void VectorizedEnv::PostCreateEnvs(const int N)
+torch::Tensor VectorizedEnv::NormalizeObs(const torch::Tensor& obs) const
 {
-
+    if (norm_obs)
+    {
+        return torch::clip((obs - obs_rms.GetMean()) / torch::sqrt(obs_rms.GetVar() + epsilon), -max_obs, max_obs);
+    }
+    else
+    {
+        return obs;
+    }
 }
 
+torch::Tensor VectorizedEnv::NormalizeReward(const torch::Tensor& reward) const
+{
+    if (norm_reward)
+    {
+        return torch::clip(reward / torch::sqrt(ret_rms.GetVar() + epsilon), -max_reward, max_reward);
+    }
+    else
+    {
+        return reward;
+    }
+}
+
+void VectorizedEnv::UpdateObs(const torch::Tensor& obs)
+{
+    if (training && norm_obs)
+    {
+        obs_rms.Update(obs);
+    }
+}
+
+void VectorizedEnv::UpdateReward(const torch::Tensor& reward)
+{
+    if (training && norm_reward)
+    {
+        returns = returns + discount_factor * reward;
+        ret_rms.Update(returns);
+    }
+}
