@@ -182,7 +182,7 @@ void PPO::Play(const uint64_t total_timesteps)
 
     while (t < total_timesteps)
     {
-        env.Render();
+        env.Render(50);
         // Use policy to deterministically predict an action
         auto [action, value, log_prob] = policy(obs, true);
 
