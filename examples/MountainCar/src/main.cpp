@@ -38,7 +38,7 @@ int main(char argc, char* argv[])
         PPO ppo(env, args);
 
         auto start = std::chrono::steady_clock::now();
-        ppo.Learn(20000);
+        ppo.Learn(50000);
         auto end = std::chrono::steady_clock::now();
         std::cout << "Training done in: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0 << "s" << std::endl;
     

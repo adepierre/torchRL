@@ -10,6 +10,10 @@ set(src_files
     src/main.cpp
 )
 
+source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}
+	FILES ${hdr_files} ${src_files}
+)
+
 add_executable(${PROJECT_NAME} ${hdr_files} ${src_files})
 target_include_directories(${PROJECT_NAME} PUBLIC include)
 target_link_libraries(${PROJECT_NAME} PRIVATE torchrl)

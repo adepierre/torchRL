@@ -4,6 +4,7 @@
 #include "torchrl/algorithms/ppo/PPOArgs.hpp"
 #include "torchrl/rl/RolloutBuffer.hpp"
 #include "torchrl/envs/VectorizedEnv.hpp"
+#include "torchrl/utils/Logger.hpp"
 
 PPO::PPO(VectorizedEnv& env_, const PPOArgs& args_) : env(env_), args(args_)
 {
@@ -17,6 +18,16 @@ PPO::~PPO()
 
 void PPO::Learn(const uint64_t total_timesteps)
 {
+    Logger logger((std::filesystem::path(args.exp_path) / "training_logs.csv").string(), true);
+    logger.SetColumns({
+        "Average reward per episode",
+        "Average reward per step",
+        "Average episode length",
+        "Policy loss",
+        "Value loss",
+        "Entropy loss"
+    });
+
     torch::optim::Adam optimizer(policy->parameters(), torch::optim::AdamOptions(args.lr));
     RolloutBuffer rollout_buffer(env.GetNumEnvs(), args.n_steps);
 
@@ -25,23 +36,13 @@ void PPO::Learn(const uint64_t total_timesteps)
 
     uint64_t timestep = 0;
     uint64_t iteration = 0;
-
-    float average_reward_per_episode = 0.0f;
-    float average_reward_per_step = 0.0f;
-    float average_episode_length = 0.0f;
     bool has_average = false;
 
     while (timestep < total_timesteps)
     {
         auto [total_reward, total_steps, total_episodes] = CollectRollouts(rollout_buffer);
 
-        if (total_episodes > 0)
-        {
-            has_average = true;
-            average_reward_per_episode = total_reward / total_episodes;
-            average_reward_per_step = total_reward / total_steps;
-            average_episode_length = static_cast<float>(total_steps) / total_episodes;
-        }
+        has_average = total_episodes > 0;
 
         auto dataset = rollout_buffer.map(RolloutSampleBatchTransform());
         timestep += dataset.size().value();
@@ -93,15 +94,53 @@ void PPO::Learn(const uint64_t total_timesteps)
                 num_batches += 1;
             }
         }
+        iteration += num_batches;
+
+        if (has_average)
+        {
+            logger.Log(
+                {
+                    "Average reward per episode",
+                    "Average reward per step",
+                    "Average episode length",
+                    "Policy loss",
+                    "Value loss",
+                    "Entropy loss"
+                },
+                {
+                    { iteration, timestep, total_reward / total_episodes},
+                    { iteration, timestep, total_reward / total_steps},
+                    { iteration, timestep, static_cast<float>(total_steps) / total_episodes},
+                    { iteration, timestep, policy_loss_val / num_batches},
+                    { iteration, timestep, value_loss_val / num_batches},
+                    { iteration, timestep, entropy_loss_val / num_batches}
+                }
+            );
+        }
+        else
+        {
+            logger.Log(
+                {
+                    "Policy loss",
+                    "Value loss",
+                    "Entropy loss"
+                },
+                {
+                    { iteration, timestep, policy_loss_val / num_batches},
+                    { iteration, timestep, value_loss_val / num_batches},
+                    { iteration, timestep, entropy_loss_val / num_batches}
+                }
+            );
+        }
 
         std::cout 
             << "Timestep: " << timestep << "\n";
         if (has_average)
         {
             std::cout
-                << "Average reward per episode: " << average_reward_per_episode << "\n"
-                << "Average reward per step: " << average_reward_per_step << "\n"
-                << "Average episode length: " << average_episode_length << "\n";
+                << "Average reward per episode: " << total_reward / total_episodes << "\n"
+                << "Average reward per step: " << total_reward / total_steps << "\n"
+                << "Average episode length: " << static_cast<float>(total_steps) / total_episodes << "\n";
         }
         std::cout
             << "Policy Loss: " << policy_loss_val / num_batches << "\n"

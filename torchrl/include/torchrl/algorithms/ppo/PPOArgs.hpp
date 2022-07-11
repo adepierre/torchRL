@@ -1,6 +1,6 @@
 #pragma once
 
-#include "torchrl/rl/Args.hpp"
+#include "torchrl/utils/Args.hpp"
 
 struct PPOArgs : public Args
 {

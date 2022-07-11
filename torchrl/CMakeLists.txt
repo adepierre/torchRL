@@ -7,12 +7,14 @@ set(hdr_files
     include/torchrl/envs/AbstractEnv.hpp
     include/torchrl/envs/RunningMeanStd.hpp
     include/torchrl/envs/VectorizedEnv.hpp
-    
-    include/torchrl/rl/Args.hpp
+	
     include/torchrl/rl/MLP.hpp
     include/torchrl/rl/NormalDistribution.hpp
     include/torchrl/rl/Policy.hpp
     include/torchrl/rl/RolloutBuffer.hpp
+	
+    include/torchrl/utils/Args.hpp
+    include/torchrl/utils/Logger.hpp
 )
 
 set(src_files
@@ -26,6 +28,8 @@ set(src_files
     src/rl/NormalDistribution.cpp
     src/rl/Policy.cpp
     src/rl/RolloutBuffer.cpp
+	
+    src/utils/Logger.cpp
 )
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}
