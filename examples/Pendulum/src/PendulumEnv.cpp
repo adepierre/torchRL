@@ -93,39 +93,111 @@ void PendulumEnv::RenderImpl()
     const float end_x = center_x - length * std::sin(theta);
     const float end_y = center_y - length * std::cos(theta);
 
+    const float pos_frac = (last_action > 0.0f ? last_action / 2.0f : 0.0f);
+    const float neg_frac = (last_action < 0.0f ? last_action / -2.0f : 0.0f);
+
+    const int max_row_left_pos = 1 + static_cast<int>(pos_frac * 4 * (height - 2));
+    const int max_col_bottom_pos = 1 + static_cast<int>((pos_frac - 0.25f) * 4 * (width - 2));
+    const int min_row_right_pos = height - 1 - static_cast<int>((pos_frac - 0.5f) * 4 * (height - 2));
+    const int min_col_top_pos = width - 1 - static_cast<int>((pos_frac - 0.75f) * 4 * (width - 2));
+
+
+    const int max_col_top_neg = 1 + static_cast<int>(neg_frac * 4 * (width - 2));
+    const int max_row_right_neg = 1 + static_cast<int>((neg_frac - 0.25f) * 4 * (height - 2));
+    const int min_col_bottom_neg = width - 1 - static_cast<int>((neg_frac - 0.5f) * 4 * (width - 2));
+    const int min_row_left_neg = height - 1 - static_cast<int>((neg_frac - 0.75f) * 4 * (height - 2));
+
     std::stringstream output;
     output << "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n";
+
+    // Top line
     for (int i = 0; i < width; ++i)
     {
-        output << '#';
+        output << static_cast<char>(219);
     }
     output << '\n';
-    for (int y = 1; y < height - 3; ++y)
+
+    // Torque top line
+    output << static_cast<char>(219);
+    for (int i = 1; i < width - 1; i++)
     {
-        output << '#';
-        for (int x = 1; x < width - 1; ++x)
+        if (pos_frac > 0.0f && i >= min_col_top_pos)
+        {
+            output << static_cast<char>(174);
+        }
+        else if (neg_frac > 0.0f && i <= max_col_top_neg)
+        {
+            output << static_cast<char>(175);
+        }
+        else
+        {
+            output << ' ';
+        }
+    }
+    output << static_cast<char>(219) << '\n';
+
+    // Inside
+    for (int y = 1; y < height - 1; ++y)
+    {
+        output << static_cast<char>(219);
+        // Left torque col
+        if (pos_frac > 0.0f && y <= max_row_left_pos)
+        {
+            output << 'v';
+        }
+        else if (neg_frac > 0.0f && y >= min_row_left_neg)
+        {
+            output << '^';
+        }
+        else
+        {
+            output << ' ';
+        }
+        // Pendulum drawing
+        for (int x = 2; x < width - 2; ++x)
         {
             output << (LinesCrossPixel(center_x, center_y, end_x, end_y, x, y) ? '#' : ' ');
         }
-        output << "#\n";
+        // Right torque col
+        if (pos_frac > 0.0f && y >= min_row_right_pos)
+        {
+            output << '^';
+        }
+        else if (neg_frac > 0.0f && y <= max_row_right_neg)
+        {
+            output << 'v';
+        }
+        else
+        {
+            output << ' ';
+        }
+        output << static_cast<char>(219) << '\n';
     }
-    const int M = static_cast<int>(width / 2.0f - std::min(last_action, 0.0f) / 2.0f * (width - 2) / 2.0f);
-    const int m = static_cast<int>(width / 2.0f - std::max(last_action, 0.0f) / 2.0f * (width - 2) / 2.0f);
-    output << "#";
-    for (int i = 1; i < width - 1; ++i)
+
+    // Torque bottom line
+    output << static_cast<char>(219);
+    for (int i = 1; i < width - 1; i++)
     {
-        output << ((i >= m && i <= M) ? "#" : " ");
+
+        if (pos_frac > 0.0f && i <= max_col_bottom_pos)
+        {
+            output << static_cast<char>(175);
+        }
+        else if (neg_frac > 0.0f && i >= min_col_bottom_neg)
+        {
+            output << static_cast<char>(174);
+        }
+        else
+        {
+            output << ' ';
+        }
     }
-    output << "#\n";
-    output << "#";
-    for (int i = 1; i < width - 1; ++i)
-    {
-        output << " ";
-    }
-    output << "#\n";
+    output << static_cast<char>(219) << '\n';
+
+    // Bottom line
     for (int i = 0; i < width; ++i)
     {
-        output << '#';
+        output << static_cast<char>(219);
     }
     std::cout << output.str() << std::endl;
 }
