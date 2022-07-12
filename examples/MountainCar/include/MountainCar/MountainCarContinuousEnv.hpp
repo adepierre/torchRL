@@ -17,6 +17,14 @@ public:
     virtual torch::Tensor GetObs() const override;
 
 private:
+    static constexpr float min_action = -1.0f;
+    static constexpr float max_action = 1.0f;
+    static constexpr float min_position = -1.2f;
+    static constexpr float max_position = 0.6f;
+    static constexpr float max_speed = 0.07f;
+    static constexpr float goal_position = 0.45f;
+    static constexpr float power = 0.0015f;
+
     float position;
     float velocity;
 
