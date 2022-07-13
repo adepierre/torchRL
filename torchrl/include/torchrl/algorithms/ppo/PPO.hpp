@@ -16,7 +16,7 @@ public:
 
     void Learn(const uint64_t total_timesteps);
 
-    void Play(const uint64_t total_timesteps);
+    void Play();
 
 private:
     /// @brief Use the policy to play in the env and store the data in buffer

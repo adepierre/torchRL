@@ -36,10 +36,10 @@ int main(char argc, char* argv[])
         /* ------------- PLAY ------------- */
         // We recreate everything so we're sure data will be loaded from the files
         VectorizedEnv env_play(args.normalize_env_obs, args.normalize_env_reward);
-        env_play.CreateEnvs<PendulumEnv>(1, args.seed + 1);
+        env_play.CreateEnvs<PendulumEnv>(1, args.seed + 42);
         PPO ppo_play(env_play, args);
 
-        ppo_play.Play(1000);
+        ppo_play.Play();
 
     }
     catch (const std::exception& e)

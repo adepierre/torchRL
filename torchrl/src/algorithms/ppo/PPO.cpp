@@ -18,14 +18,20 @@ PPO::~PPO()
 
 void PPO::Learn(const uint64_t total_timesteps)
 {
-    Logger logger((std::filesystem::path(args.exp_path) / "training_logs.csv").string(), true);
+    std::filesystem::path exp_path = args.exp_path;
+    if (!std::filesystem::exists(exp_path))
+    {
+        std::filesystem::create_directories(exp_path);
+    }
+
+    Logger logger((exp_path / "training_logs.csv").string(), true);
     logger.SetColumns({
-        "Average reward per episode",
-        "Average reward per step",
-        "Average episode length",
-        "Policy loss",
-        "Value loss",
-        "Entropy loss"
+        "Reward episode",
+        "Reward step",
+        "Steps per episode",
+        "Loss policy",
+        "Loss value",
+        "Loss entropy"
     });
 
     torch::optim::Adam optimizer(policy->parameters(), torch::optim::AdamOptions(args.lr));
@@ -98,37 +104,24 @@ void PPO::Learn(const uint64_t total_timesteps)
 
         if (has_average)
         {
-            logger.Log(
+            logger.Log(iteration, timestep,
                 {
-                    "Average reward per episode",
-                    "Average reward per step",
-                    "Average episode length",
-                    "Policy loss",
-                    "Value loss",
-                    "Entropy loss"
-                },
-                {
-                    { iteration, timestep, total_reward / total_episodes},
-                    { iteration, timestep, total_reward / total_steps},
-                    { iteration, timestep, static_cast<float>(total_steps) / total_episodes},
-                    { iteration, timestep, policy_loss_val / num_batches},
-                    { iteration, timestep, value_loss_val / num_batches},
-                    { iteration, timestep, entropy_loss_val / num_batches}
+                    {"Reward episode", total_reward / total_episodes },
+                    {"Reward step", total_reward / total_steps },
+                    {"Steps per episode", static_cast<float>(total_steps) / total_episodes },
+                    {"Loss policy", policy_loss_val / num_batches },
+                    {"Loss value", value_loss_val / num_batches },
+                    {"Loss entropy", entropy_loss_val / num_batches }
                 }
             );
         }
         else
         {
-            logger.Log(
+            logger.Log(iteration, timestep,
                 {
-                    "Policy loss",
-                    "Value loss",
-                    "Entropy loss"
-                },
-                {
-                    { iteration, timestep, policy_loss_val / num_batches},
-                    { iteration, timestep, value_loss_val / num_batches},
-                    { iteration, timestep, entropy_loss_val / num_batches}
+                    { "Loss policy", policy_loss_val / num_batches },
+                    { "Loss value", value_loss_val / num_batches },
+                    { "Loss entropy", entropy_loss_val / num_batches }
                 }
             );
         }
@@ -138,9 +131,9 @@ void PPO::Learn(const uint64_t total_timesteps)
         if (has_average)
         {
             std::cout
-                << "Average reward per episode: " << total_reward / total_episodes << "\n"
-                << "Average reward per step: " << total_reward / total_steps << "\n"
-                << "Average episode length: " << static_cast<float>(total_steps) / total_episodes << "\n";
+                << "Reward episode: " << total_reward / total_episodes << "\n"
+                << "Reward step: " << total_reward / total_steps << "\n"
+                << "Steps per episode: " << static_cast<float>(total_steps) / total_episodes << "\n";
         }
         std::cout
             << "Policy Loss: " << policy_loss_val / num_batches << "\n"
@@ -149,16 +142,11 @@ void PPO::Learn(const uint64_t total_timesteps)
             << std::endl;
     }
 
-    std::filesystem::path exp_path = args.exp_path;
-    if (!std::filesystem::exists(args.exp_path))
-    {
-        std::filesystem::create_directories(args.exp_path);
-    }
     torch::save(policy, (exp_path / "policy.pt").string());
     env.Save(exp_path.string());
 }
 
-void PPO::Play(const uint64_t total_timesteps)
+void PPO::Play()
 {
     torch::NoGradGuard no_grad;
 
@@ -176,11 +164,12 @@ void PPO::Play(const uint64_t total_timesteps)
     env.SetTraining(false);
     env.Reset();
 
-    uint64_t t = 0;
     VectorizedStepResult step_result;
     torch::Tensor obs = env.GetObs();
 
-    while (t < total_timesteps)
+    bool run = true;
+
+    while (run)
     {
         env.Render(50);
         // Use policy to deterministically predict an action
@@ -205,9 +194,22 @@ void PPO::Play(const uint64_t total_timesteps)
                     << std::setw(10) << std::fixed << std::setprecision(2) << step_result.episodes_tot_reward[i]
                     << std::setw(10) << std::fixed << std::setprecision(4) << step_result.episodes_tot_length[i]
                     << std::endl;
+
+                char type;
+                do
+                {
+                    std::cout << "Keep playing? [y/n]" << std::flush;
+                    std::cin >> type;
+                } while (!std::cin.fail() && type != 'y' && type != 'Y' && type != 'n' && type != 'N');
+
+                if (type == 'n' || type == 'N')
+                {
+                    std::cout << "Good bye!" << std::endl;
+                    run = false;
+                    break;
+                }
             }
         }
-        t += 1;
     }
 }
 
