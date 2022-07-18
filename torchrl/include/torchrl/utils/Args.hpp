@@ -14,9 +14,9 @@ struct Args
     /// @brief path to save (resp. load) model weights after (resp. before) training (resp. inference) 
     std::string exp_path = "exp";
     /// @brief whether or not the env observations should be normalized
-    bool normalize_env_obs = true;
+    bool normalize_env_obs = false;
     /// @brief whether or not the env rewards should be normalized
-    bool normalize_env_reward = true;
+    bool normalize_env_reward = false;
 
     std::string GenerateHelp(const char* argv0, const bool include_parent_help = true)
     {
@@ -27,8 +27,8 @@ struct Args
             << "\t--seed\tRandom seed for envs and libtorch, default: random\n"
             << "\t--n_envs\tNumber of identical environments in the vectorized env, default: 4\n"
             << "\t--exp_path\tPath to save (resp. load) model weights after (resp. before) training (resp. inference), default: \"exp\"\n"
-            << "\t--normalize_env_obs\tWhether or not the env observations should be normalized default: 1\n"
-            << "\t--normalize_env_reward\tWhether or not the env rewards should be normalized default: 1\n";
+            << "\t--normalize_env_obs\tWhether or not the env observations should be normalized default: 0\n"
+            << "\t--normalize_env_reward\tWhether or not the env rewards should be normalized default: 0\n";
 
         return s.str();
     }

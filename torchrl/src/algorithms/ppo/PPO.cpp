@@ -16,23 +16,16 @@ PPO::~PPO()
 
 }
 
-void PPO::Learn(const uint64_t total_timesteps)
+float PPO::Learn(const uint64_t total_timesteps, const bool log_console, const bool draw_curves)
 {
+    auto start = std::chrono::steady_clock::now();
     std::filesystem::path exp_path = args.exp_path;
     if (!std::filesystem::exists(exp_path))
     {
         std::filesystem::create_directories(exp_path);
     }
 
-    Logger logger((exp_path / "training_logs.csv").string(), true);
-    logger.SetColumns({
-        "Reward episode",
-        "Reward step",
-        "Steps per episode",
-        "Loss policy",
-        "Loss value",
-        "Loss entropy"
-    });
+    Logger logger((exp_path / "training_logs.csv").string(), log_console, draw_curves);
 
     torch::optim::Adam optimizer(policy->parameters(), torch::optim::AdamOptions(args.lr));
     RolloutBuffer rollout_buffer(env.GetNumEnvs(), args.n_steps);
@@ -101,60 +94,49 @@ void PPO::Learn(const uint64_t total_timesteps)
             }
         }
         iteration += num_batches;
+        const float train_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count() / 1000.0f;
 
+        logger.Log(timestep, iteration, train_time,
+            {
+                { "Loss policy", policy_loss_val / num_batches },
+                { "Loss value", value_loss_val / num_batches },
+                { "Loss entropy", entropy_loss_val / num_batches }
+            }
+        );
         if (has_average)
         {
-            logger.Log(iteration, timestep,
+            logger.Log(timestep, iteration, train_time,
                 {
                     {"Reward episode", total_reward / total_episodes },
                     {"Reward step", total_reward / total_steps },
-                    {"Steps per episode", static_cast<float>(total_steps) / total_episodes },
-                    {"Loss policy", policy_loss_val / num_batches },
-                    {"Loss value", value_loss_val / num_batches },
-                    {"Loss entropy", entropy_loss_val / num_batches }
+                    {"Steps per episode", static_cast<float>(total_steps) / total_episodes }
                 }
             );
         }
-        else
-        {
-            logger.Log(iteration, timestep,
-                {
-                    { "Loss policy", policy_loss_val / num_batches },
-                    { "Loss value", value_loss_val / num_batches },
-                    { "Loss entropy", entropy_loss_val / num_batches }
-                }
-            );
-        }
-
-        std::cout 
-            << "Timestep: " << timestep << "\n";
-        if (has_average)
-        {
-            std::cout
-                << "Reward episode: " << total_reward / total_episodes << "\n"
-                << "Reward step: " << total_reward / total_steps << "\n"
-                << "Steps per episode: " << static_cast<float>(total_steps) / total_episodes << "\n";
-        }
-        std::cout
-            << "Policy Loss: " << policy_loss_val / num_batches << "\n"
-            << "Value Loss: " << value_loss_val / num_batches << "\n"
-            << "Entropy Loss: " << entropy_loss_val / num_batches << "\n"
-            << std::endl;
     }
 
     torch::save(policy, (exp_path / "policy.pt").string());
     env.Save(exp_path.string());
+    auto end = std::chrono::steady_clock::now();
+
+    return std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0f;
 }
 
-void PPO::Play()
+std::vector<std::pair<uint64_t, float> > PPO::Play(const uint64_t num_episode, const bool render)
 {
     torch::NoGradGuard no_grad;
+
+    std::vector<std::pair<uint64_t, float> > output;
+    if (num_episode > 0)
+    {
+        output.reserve(num_episode);
+    }
 
     std::filesystem::path exp_path = args.exp_path;
     if (!std::filesystem::exists(exp_path))
     {
         std::cerr << "Error, can't find trained files in " << exp_path << std::endl;
-        return;
+        return {};
     }
 
     torch::load(policy, (exp_path / "policy.pt").string());
@@ -167,11 +149,15 @@ void PPO::Play()
     VectorizedStepResult step_result;
     torch::Tensor obs = env.GetObs();
 
+    uint64_t episode_index = 0;
     bool run = true;
-
-    while (run)
+    while ((num_episode == 0 && run) || episode_index < num_episode)
     {
-        env.Render(50);
+        if (render)
+        {
+            env.Render(50);
+        }
+        
         // Use policy to deterministically predict an action
         auto [action, value, log_prob] = policy(obs, true);
 
@@ -184,33 +170,48 @@ void PPO::Play()
         {
             if (step_result.terminal_states[i] != TerminalState::NotTerminal)
             {
+                if (render)
+                {
+                    // Log result
+                    std::cout
+                        << std::setw(13) << std::fixed << "Episode done!"
+                        << std::setw(10) << std::fixed << "Reward"
+                        << std::setw(10) << std::fixed << "Length"
+                        << "\n"
+                        << std::setw(13) << std::fixed << ""
+                        << std::setw(10) << std::fixed << std::setprecision(2) << step_result.episodes_tot_reward[i]
+                        << std::setw(10) << std::fixed << std::setprecision(4) << step_result.episodes_tot_length[i]
+                        << std::endl;
+                }
+
+                output.push_back({ step_result.episodes_tot_length[i], step_result.episodes_tot_reward[i] });
+
+                episode_index += 1;
+
+                // Update obs with new one
                 obs[i] = step_result.new_episode_obs[i];
-                std::cout 
-                    << std::setw(13) << std::fixed << "Episode done!"
-                    << std::setw(10) << std::fixed << "Reward"
-                    << std::setw(10) << std::fixed << "Length"
-                    << "\n"
-                    << std::setw(13) << std::fixed << ""
-                    << std::setw(10) << std::fixed << std::setprecision(2) << step_result.episodes_tot_reward[i]
-                    << std::setw(10) << std::fixed << std::setprecision(4) << step_result.episodes_tot_length[i]
-                    << std::endl;
 
-                char type;
-                do
+                if (num_episode == 0)
                 {
-                    std::cout << "Keep playing? [y/n]" << std::flush;
-                    std::cin >> type;
-                } while (!std::cin.fail() && type != 'y' && type != 'Y' && type != 'n' && type != 'N');
+                    char type;
+                    do
+                    {
+                        std::cout << "Keep playing? [y/n]" << std::flush;
+                        std::cin >> type;
+                    } while (!std::cin.fail() && type != 'y' && type != 'Y' && type != 'n' && type != 'N');
 
-                if (type == 'n' || type == 'N')
-                {
-                    std::cout << "Good bye!" << std::endl;
-                    run = false;
-                    break;
+                    if (type == 'n' || type == 'N')
+                    {
+                        std::cout << "Good bye!" << std::endl;
+                        run = false;
+                        break;
+                    }
                 }
             }
         }
     }
+
+    return output;
 }
 
 std::tuple<float, uint64_t, uint64_t> PPO::CollectRollouts(RolloutBuffer& buffer)

@@ -1,29 +1,37 @@
 #include "torchrl/utils/Logger.hpp"
 
+#include <iomanip>
 #include <iostream>
 #include <unordered_map>
+#include <sstream>
 
+#ifdef WITH_IMPLOT
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
 #include <implot.h>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#else
+struct GLFWwindow {};
+#endif
 
 
-Logger::Logger(const std::string& log_file, const bool real_time_logging_) : file(std::ofstream(log_file, std::ios::out))
+Logger::Logger(const std::string& logfile_path_, const bool log_in_console_, const bool draw_curves_) :
+    logfile_path(logfile_path_), file(std::ofstream(logfile_path_, std::ios::out)), log_in_console(log_in_console_)
 {
-    real_time_logging = real_time_logging_;
-
-    plot_thread = std::move(std::thread(&Logger::Plot, this));
+#ifdef WITH_IMPLOT
+    if (draw_curves_)
+    {
+        plot_thread = std::move(std::thread(&Logger::Plot, this));
+    }
+#endif
+    should_close = false;
 }
 
 Logger::~Logger()
 {
-    if (!real_time_logging)
-    {
-        Dump();
-    }
+    should_close = true;
     file.close();
     if (plot_thread.joinable())
     {
@@ -31,71 +39,149 @@ Logger::~Logger()
     }
 }
 
-void Logger::SetColumns(const std::vector<std::string>& columns_name)
-{
-    logged_data.clear();
-    for (auto& s : columns_name)
-    {
-        logged_data[s];
-    }
-    if (real_time_logging)
-    {
-        for (auto& s : logged_data)
-        {
-            file << "\t\t" << s.first << "\t";
-        }
-        file << std::endl;
-    }
-}
-
-void Logger::Log(const uint64_t update_steps, const uint64_t play_steps,
+void Logger::Log(const uint64_t play_steps, const uint64_t update_steps, const float train_time,
     const std::map<std::string, float>& values)
 {
-    std::lock_guard<std::mutex> data_lock(data_mutex);
-    //assert(columns_name.size() == value.size());
-
-    for (const auto& s: values)
+    // Console log
+    if (log_in_console)
     {
-        // If not real time, we can add columns during the logging process if we want to
-        if (!real_time_logging)
+        uint64_t max_col_size = 12;
+        for (const auto& [key, value] : values)
         {
-            logged_data[s.first];
+            max_col_size = std::max(max_col_size, key.size());
         }
 
-        // The column is assumed to exist
-        logged_data.at(s.first).push_back({static_cast<double>(update_steps), static_cast<double>(play_steps), static_cast<double>(s.second) });
+        std::stringstream s;
+        s << std::left << std::setw(max_col_size) << "Play steps" << ": " << std::fixed << std::setw(10) << play_steps << "\n"
+            << std::left << std::setw(max_col_size) << "Update steps" << ": " << std::fixed << std::setw(10) << update_steps << "\n"
+            << std::left << std::setw(max_col_size) << "Train time" << ": " << std::fixed << std::setw(10) << std::setprecision(3) << train_time << "\n";
+
+        for (const auto& [key, value] : values)
+        {
+            s
+                << std::left << std::setw(max_col_size) << key << ": "
+                << std::left << std::fixed << std::setprecision(3) << std::setw(10) << value << "\n";
+        }
+        const std::string logged = s.str();
+        std::cout << logged << std::endl;
     }
 
-    // Dump the new line to the log file
-    if (real_time_logging)
+    // File log
+    if (file.is_open())
     {
-        // For each known column
-        for (auto& s : logged_data)
-        {
-            const auto it = values.find(s.first);
+        std::lock_guard<std::mutex> data_lock(data_mutex);
 
-            // If we have a value for this column
-            if (it != values.end())
+        bool new_columns = false;
+        for (const auto& s : values)
+        {
+            if (logged_data.find(s.first) == logged_data.end())
             {
-                file << update_steps << "\t" << play_steps << "\t" << it->second << "\t";
+                new_columns = true;
+                logged_data[s.first];
             }
-            // Else blank entry
-            else
+
+            // Add the new value to the column
+            logged_data.at(s.first).push_back({ static_cast<double>(play_steps), static_cast<double>(update_steps), static_cast<double>(train_time), static_cast<double>(s.second) });
+        }
+
+        // If a new column has been added, we need to rewrite the whole file
+        if (new_columns)
+        {
+            file.close();
+            file = std::ofstream(logfile_path, std::ios::out);
+            Dump();
+        }
+        // Else we just add the new line
+        else
+        {
+            file << play_steps << "\t" << update_steps << "\t" << train_time << "\t";
+            for (auto& s : logged_data)
             {
-                file << "\t\t\t";
+                const auto it = values.find(s.first);
+
+                // If we have a value for this column
+                if (it != values.end())
+                {
+                    file << it->second << "\t";
+                }
+                // Else blank entry
+                else
+                {
+                    file << "\t";
+                }
+            }
+            file << std::endl;
+        }
+    }
+}
+
+void Logger::Dump()
+{
+    file << "Play steps\tUpdate steps\tTrain time\t";
+    // Header lines
+    for (const auto& [key, value] : logged_data)
+    {
+        file << key << "\t";
+    }
+    file << std::endl;
+
+    std::unordered_map<std::string, uint64_t> column_index;
+    for (const auto& [key, value] : logged_data)
+    {
+        column_index[key] = 0;
+    }
+
+    uint64_t index = 0;
+    while (true)
+    {
+        bool has_value = false;
+        uint64_t min_play_steps = std::numeric_limits<uint64_t>::max();
+        uint64_t min_update_steps = 0;
+        double min_train_time = 0.0;
+        // Find the lowest play_step value for the next line
+        for (const auto& [key, value] : logged_data)
+        {
+            if (column_index[key] < value.size())
+            {
+                has_value = true;
+                if (static_cast<uint64_t>(value[column_index[key]].play_steps) < min_play_steps)
+                {
+                    min_play_steps = static_cast<uint64_t>(value[column_index[key]].play_steps);
+                    min_update_steps = static_cast<uint64_t>(value[column_index[key]].update_steps);
+                    min_train_time = value[column_index[key]].train_time;
+                }
+            }
+        }
+
+        if (!has_value)
+        {
+            break;
+        }
+
+        file
+            << static_cast<uint64_t>(min_play_steps) << "\t"
+            << static_cast<uint64_t>(min_update_steps) << "\t"
+            << min_train_time << "\t";
+
+        for (const auto& [key, value] : logged_data)
+        {
+            if (column_index[key] < value.size() && value[column_index[key]].play_steps == min_play_steps)
+            {
+                file << value[column_index[key]].value << "\t";
+                column_index[key] += 1;
+            }
+            else // Blank entry
+            {
+                file << "\t";
             }
         }
         file << std::endl;
     }
-}
-
-void Logger::Dump() const
-{
-    //TODO
 }
 
 void Logger::Plot() const
 {
+#ifdef WITH_IMPLOT
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -131,8 +217,6 @@ void Logger::Plot() const
     ImGui::CreateContext();
     ImPlot::CreateContext();
 
-    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-
     // Style
     ImGui::StyleColorsDark();
 
@@ -150,15 +234,19 @@ void Logger::Plot() const
 
     glfwDestroyWindow(window);
     glfwTerminate();
+#endif
 }
 
 void Logger::InternalPlotLoop(GLFWwindow* window) const
 {
+#ifdef WITH_IMPLOT
     int width, height;
     glfwGetWindowSize(window, &width, &height);
 
     bool fit_data = true;
     std::unordered_map<std::string, bool> displayed_values;
+
+    bool display_popup = true;
 
     while (glfwWindowShouldClose(window) == 0)
     {
@@ -173,6 +261,25 @@ void Logger::InternalPlotLoop(GLFWwindow* window) const
         {
             ImGui::SetNextWindowPos(ImVec2(0, 0));
             ImGui::SetNextWindowSize(ImVec2(width, height));
+
+            if (should_close && display_popup)
+            {
+                ImGui::OpenPopup("Done");
+                ImGui::SetNextWindowSize(ImVec2(0, 0));
+                ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+                if (ImGui::BeginPopupModal("Done", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+                {
+                    ImGui::Text("Training is done.\nYou can still interact with the plot window, close it when you're done.\nMake sure you take a screen shot if you want to save it !");
+                    display_popup = !ImGui::Button("Close");
+                    if (!display_popup)
+                    {
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::EndPopup();
+                }
+            }
+
+
             ImGui::Begin("Logged values", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
             ImGui::Checkbox("Auto-Fit", &fit_data);
 
@@ -238,9 +345,10 @@ void Logger::InternalPlotLoop(GLFWwindow* window) const
                             if (lowest != value.end())
                             {
                                 ImGui::BeginTooltip();
-                                ImGui::Text("Play steps:   %d", static_cast<int>(lowest->play_steps));
+                                ImGui::Text("Play steps  : %d", static_cast<int>(lowest->play_steps));
                                 ImGui::Text("Update steps: %d", static_cast<int>(lowest->update_steps));
-                                ImGui::Text("Value:        %.2f", lowest->value);
+                                ImGui::Text("Train time  : %.2f", lowest->train_time);
+                                ImGui::Text("Value       : %.2f", lowest->value);
                                 ImGui::EndTooltip();
 
                                 ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, -1.0f, ImVec4(1, 0.43f, 0.26f, 1));
@@ -265,4 +373,5 @@ void Logger::InternalPlotLoop(GLFWwindow* window) const
         // process user events
         glfwPollEvents();
     }
+#endif
 }

@@ -41,4 +41,9 @@ target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/in
 set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 17)
 
 target_link_libraries(${PROJECT_NAME} PUBLIC "${TORCH_LIBRARIES}")
-target_link_libraries(${PROJECT_NAME} PRIVATE glfw ${OPENGL_LIBRARIES} glad implot)
+target_link_libraries(${PROJECT_NAME} PUBLIC Threads::Threads)
+
+if (TORCHRL_IMPLOT_LOGGER)
+	target_link_libraries(${PROJECT_NAME} PRIVATE glfw ${OPENGL_LIBRARIES} glad implot)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE WITH_IMPLOT)
+endif()
