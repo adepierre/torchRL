@@ -16,7 +16,7 @@ PPO::~PPO()
 
 }
 
-float PPO::Learn(const uint64_t total_timesteps, const bool log_console, const bool draw_curves)
+void PPO::Learn(const uint64_t total_timesteps, const bool log_console, const bool draw_curves)
 {
     auto start = std::chrono::steady_clock::now();
     std::filesystem::path exp_path = args.exp_path;
@@ -117,9 +117,6 @@ float PPO::Learn(const uint64_t total_timesteps, const bool log_console, const b
 
     torch::save(policy, (exp_path / "policy.pt").string());
     env.Save(exp_path.string());
-    auto end = std::chrono::steady_clock::now();
-
-    return std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0f;
 }
 
 std::vector<std::pair<uint64_t, float> > PPO::Play(const uint64_t num_episode, const bool render)

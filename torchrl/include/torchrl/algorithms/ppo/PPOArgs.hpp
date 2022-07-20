@@ -11,7 +11,7 @@ struct PPOArgs : public Args
     /// @brief Number of steps collected for each env
     uint64_t n_steps = 1024;
     /// @brief Number of times each collected sample is used for training
-    uint64_t n_epochs = 5;
+    uint64_t n_epochs = 10;
 
     /// @brief Value loss weight
     float val_loss_weight = 0.5f;
@@ -43,7 +43,7 @@ struct PPOArgs : public Args
         s
             << "\t--batch_size\tSize of a minibatch, default: 64\n"
             << "\t--n_steps\tNumber of steps collected by each env during one rollout, default: 1024\n"
-            << "\t--n_epochs\tNumber of times each collected sample is used for training, default: 5\n"
+            << "\t--n_epochs\tNumber of times each collected sample is used for training, default: 10\n"
             << "\t--val_loss_weight\tValue loss weight, default: 0.5\n"
             << "\t--entropy_loss_weight\tEntropy loss weight, default: 0.0\n"
             << "\t--max_grad_norm\tMax norm of the grad (disabled if 0), default: 0.5\n"

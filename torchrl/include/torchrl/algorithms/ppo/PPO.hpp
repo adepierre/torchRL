@@ -19,8 +19,7 @@ public:
     /// @param total_timesteps Number of timesteps to play
     /// @param log_console If true will log training data to console
     /// @param draw_curves If true, will draw training curves (assuming WITH_IMPLOT, otherwise does nothing)
-    /// @return The total training time (in s)
-    float Learn(const uint64_t total_timesteps, const bool log_console = true, const bool draw_curves = true);
+    void Learn(const uint64_t total_timesteps, const bool log_console = true, const bool draw_curves = true);
 
     /// @brief Play for num_episode and render the env
     /// @param num_episode The number of episode to play, if 0 will ask user to continue

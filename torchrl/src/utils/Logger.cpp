@@ -269,7 +269,7 @@ void Logger::InternalPlotLoop(GLFWwindow* window) const
                 ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
                 if (ImGui::BeginPopupModal("Done", NULL, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
                 {
-                    ImGui::Text("Training is done.\nYou can still interact with the plot window, close it when you're done.\nMake sure you take a screen shot if you want to save it !");
+                    ImGui::Text("Training is done.\nYou can still interact with the plot window, close it when you're done.\nMake sure you take a screenshot if you want to save it !");
                     display_popup = !ImGui::Button("Close");
                     if (!display_popup)
                     {
